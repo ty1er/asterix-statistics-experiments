@@ -16,14 +16,13 @@
 	<name>1node</name>
     <username>iabsalyamov</username>
 	<working_dir>
-		<dir>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/working</dir>
+		<dir>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/clusters/local/working_dir</dir>
 		<NFS>false</NFS>
 	</working_dir>
-	<log_dir>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/logs</log_dir>
-	<txn_log_dir>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/txnlogs</txn_log_dir>
-	<iodevices>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/storage</iodevices>
+	<log_dir>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/clusters/local/working_dir/logs</log_dir>
+	<txn_log_dir>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/clusters/local/working_dir/txnLogs</txn_log_dir>
 	<store>storage</store>
-	<java_home>/Library/Java/Home</java_home>
+	<java_home>/Library/Java/JavaVirtualMachines/CurrentJDK/Contents/Home</java_home>
 	<master_node>
 		<id>master</id>
 		<cluster_ip>127.0.0.1</cluster_ip>
@@ -33,7 +32,8 @@
 		<http_port>8888</http_port>
 	</master_node>
 	<node>
-		<id>node1</id>
+		<id>local</id>
 		<cluster_ip>127.0.0.1</cluster_ip>
+        <iodevices>/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/clusters/local/working_dir/nc1/p1,/Users/iabsalyamov/Coding/UCR/ASTERIX/asterixdb/asterix-installer/target/asterix-installer-0.8.8-SNAPSHOT-binary-assembly/clusters/local/working_dir/nc1/p2</iodevices>
 	</node>
 </cluster>

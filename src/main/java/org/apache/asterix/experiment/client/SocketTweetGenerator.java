@@ -36,18 +36,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.apache.asterix.experiment.datagen.TweetGeneratorForSpatialIndexEvaluation;
+import org.apache.asterix.experiment.datagen.TweetGeneratorStatistics;
 import org.apache.commons.lang3.tuple.Pair;
 
 public class SocketTweetGenerator {
 
     private final ExecutorService threadPool;
 
-    private final int partitionRangeStart;
+    private final int partitionsNum;
+
+    private final int partition;
 
     private final int dataGenDuration;
-
-    private final long dataGenSeed;
 
     private final int queryGenDuration;
 
@@ -89,9 +89,9 @@ public class SocketTweetGenerator {
             }
         });
 
-        partitionRangeStart = config.getPartitionRangeStart();
+        partitionsNum = config.getPartitionsNum();
+        partition = config.getPartition();
         dataGenDuration = config.getDataGenDuration();
-        dataGenSeed = config.getDataGenSeed();
         queryGenDuration = config.getQueryGenDuration();
         startDataInterval = config.getDataInterval();
         nDataIntervals = config.getNIntervals();
@@ -111,11 +111,10 @@ public class SocketTweetGenerator {
         final Semaphore sem = new Semaphore((receiverAddresses.size() - 1) * -1);
         int i = 0;
         for (Pair<String, Integer> address : receiverAddresses) {
-            threadPool.submit(new DataGenerator(mode, sem, address.getLeft(), address.getRight(),
-                    i + partitionRangeStart, receiverAddresses.size(), dataGenSeed, dataGenDuration, queryGenDuration,
-                    nDataIntervals, startDataInterval, orchHost, orchPort, openStreetMapFilePath,
-                    locationSampleInterval, recordCountPerBatchDuringIngestionOnly, recordCountPerBatchDuringQuery,
-                    dataGenSleepTimeDuringIngestionOnly, dataGenSleepTimeDuringQuery));
+            threadPool.submit(new DataGenerator(mode, sem, address.getLeft(), address.getRight(), partition,
+                    partitionsNum, dataGenDuration, queryGenDuration, nDataIntervals, startDataInterval, orchHost,
+                    orchPort, openStreetMapFilePath, locationSampleInterval, recordCountPerBatchDuringIngestionOnly,
+                    recordCountPerBatchDuringQuery, dataGenSleepTimeDuringIngestionOnly, dataGenSleepTimeDuringQuery));
             ++i;
         }
         sem.acquire();
@@ -130,7 +129,6 @@ public class SocketTweetGenerator {
         private final String host;
         private final int port;
         private final int partition;
-        private final long dataGenSeed;
         private final int dataGenDuration;
         private final long numPartitions;
         private final int queryGenDuration;
@@ -150,8 +148,8 @@ public class SocketTweetGenerator {
         private final long dataGenSleepTimeDuringQuery;
 
         public DataGenerator(Mode m, Semaphore sem, String host, int port, int partition, int numPartitions,
-                long dataGenSeed, int dataGenDuration, int queryGenDuration, int nDataIntervals, long dataSizeInterval,
-                String orchHost, int orchPort, String openStreetMapFilePath, int locationSampleInterval,
+                int dataGenDuration, int queryGenDuration, int nDataIntervals, long dataSizeInterval, String orchHost,
+                int orchPort, String openStreetMapFilePath, int locationSampleInterval,
                 int recordCountPerBatchDuringIngestionOnly, int recordCountPerBatchDuringQuery,
                 long dataGenSleepTimeDuringIngestionOnly, long dataGenSleepTimeDuringQuery) {
             this.m = m;
@@ -160,7 +158,6 @@ public class SocketTweetGenerator {
             this.port = port;
             this.partition = partition;
             this.dataGenDuration = dataGenDuration;
-            this.dataGenSeed = dataGenSeed;
             this.numPartitions = numPartitions;
             this.queryGenDuration = queryGenDuration;
             this.nDataIntervals = nDataIntervals;
@@ -198,23 +195,20 @@ public class SocketTweetGenerator {
                     if (m == Mode.DATA && orchHost != null) {
                         orchSocket = new Socket(orchHost, orchPort);
                     }
-                    TweetGeneratorForSpatialIndexEvaluation tg = null;
+                    TweetGeneratorStatistics tg = null;
                     try {
                         Map<String, String> config = new HashMap<>();
                         String durationVal = m == Mode.TIME ? String.valueOf(dataGenDuration) : "0";
-                        config.put(TweetGeneratorForSpatialIndexEvaluation.KEY_DURATION, String.valueOf(durationVal));
-                        config.put(TweetGeneratorForSpatialIndexEvaluation.KEY_GUID_SEED,
-                                String.valueOf(dataGenSeed + partition));
-                        config.put(TweetGeneratorForSpatialIndexEvaluation.KEY_GUID_INCREMENT,
-                                String.valueOf(numPartitions));
+                        config.put(TweetGeneratorStatistics.KEY_DURATION, String.valueOf(durationVal));
+                        config.put(TweetGeneratorStatistics.KEY_GUID_SEED, String.valueOf(partition));
+                        config.put(TweetGeneratorStatistics.KEY_GUID_INCREMENT, String.valueOf(numPartitions));
                         if (openStreetMapFilePath != null) {
-                            config.put(TweetGeneratorForSpatialIndexEvaluation.KEY_OPENSTREETMAP_FILEPATH,
-                                    openStreetMapFilePath);
-                            config.put(TweetGeneratorForSpatialIndexEvaluation.KEY_LOCATION_SAMPLE_INTERVAL,
+                            config.put(TweetGeneratorStatistics.KEY_OPENSTREETMAP_FILEPATH, openStreetMapFilePath);
+                            config.put(TweetGeneratorStatistics.KEY_LOCATION_SAMPLE_INTERVAL,
                                     String.valueOf(locationSampleInterval));
                         }
-                        tg = new TweetGeneratorForSpatialIndexEvaluation(config, partition,
-                                TweetGeneratorForSpatialIndexEvaluation.OUTPUT_FORMAT_ADM_STRING, s.getOutputStream());
+                        tg = new TweetGeneratorStatistics(config, partition,
+                                TweetGeneratorStatistics.OUTPUT_FORMAT_ADM_STRING, s.getOutputStream());
                         long startTS = System.currentTimeMillis();
                         long prevTS = startTS;
                         long curTS = startTS;

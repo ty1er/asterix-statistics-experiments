@@ -27,22 +27,26 @@ import java.util.regex.Pattern;
 
 import org.apache.asterix.experiment.action.base.SequentialActionList;
 import org.apache.asterix.experiment.builder.AbstractExperimentBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1WaveletBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2WaveletBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster1ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster1NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster1UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster1WaveletBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster2ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster2NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster2UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment2Cluster2WaveletBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1ContinuousHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1NostatsBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1UniformHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1WaveletBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2ContinuousHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2NostatsBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2UniformHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2WaveletBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4ContinuousHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4NostatsBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4UniformHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4WaveletBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1ContinuousHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1NostatsBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1UniformHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1WaveletBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2ContinuousHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2NostatsBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2UniformHistBuilder;
+import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2WaveletBuilder;
 import org.kohsuke.args4j.CmdLineException;
 import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
@@ -182,6 +186,13 @@ public class LSMExperimentSetRunner {
             return numIntervals;
         }
 
+        @Option(name = "-rf", aliases = "--results-file", usage = "File containing results of experiment queries")
+        private String resultsFile = null;
+
+        public String getResultsFile() {
+            return resultsFile;
+        }
+
         @Option(name = "-sf", aliases = "--stat-file", usage = "Enable IO/CPU stats and place in specified file")
         private String statFile = null;
 
@@ -255,22 +266,26 @@ public class LSMExperimentSetRunner {
 
         Collection<AbstractExperimentBuilder> suite = new ArrayList<>();
 
-        suite.add(new StatisticsExperiment1Cluster1NostatsBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1WaveletBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1UniformHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2NostatsBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2WaveletBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2UniformHistBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster1NostatsBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster1WaveletBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster1ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster1UniformHistBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster2NostatsBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster2WaveletBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster2ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment2Cluster2UniformHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest1NostatsBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest1WaveletBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest1ContinuousHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest1UniformHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest2NostatsBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest2WaveletBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest2ContinuousHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest2UniformHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest4NostatsBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest4WaveletBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest4ContinuousHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster1Ingest4UniformHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest1NostatsBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest1WaveletBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest1ContinuousHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest1UniformHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest2NostatsBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest2WaveletBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest2ContinuousHistBuilder(config));
+        suite.add(new StatisticsExperiment1Cluster2Ingest2UniformHistBuilder(config));
 
         Pattern p = config.getRegex() == null ? null : Pattern.compile(config.getRegex());
 

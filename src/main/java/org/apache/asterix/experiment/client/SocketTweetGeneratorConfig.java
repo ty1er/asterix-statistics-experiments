@@ -33,11 +33,18 @@ import org.kohsuke.args4j.spi.Setter;
 
 public class SocketTweetGeneratorConfig {
 
-    @Option(name = "-p", aliases = "--partition-range-start", usage = "Starting partition number for the set of data generators (default = 0)")
-    private int partitionRangeStart = 0;
+    @Option(name = "-pn", aliases = "--partitions-num", usage = "Total number of data generators partitions(default = 1)")
+    private int partitionsNum = 1;
 
-    public int getPartitionRangeStart() {
-        return partitionRangeStart;
+    public int getPartitionsNum() {
+        return partitionsNum;
+    }
+
+    @Option(name = "-p", aliases = "--partition", usage = "Partition number of the current data generator")
+    private int partition;
+
+    public int getPartition() {
+        return partition;
     }
 
     @Option(name = "-d", aliases = { "--datagen-duration" }, usage = "Duration in seconds to run data generation")
@@ -122,13 +129,6 @@ public class SocketTweetGeneratorConfig {
 
     public long getDataGenSleepTimeDuringQuery() {
         return dataGenSleepTimeDuringQuery;
-    }
-
-    @Option(name = "-s", aliases = "--data-gen-seed", usage = "DataGen seed value for ID generator")
-    private long dataGenSeed = 0;
-
-    public long getDataGenSeed() {
-        return dataGenSeed;
     }
 
     @Argument(required = true, usage = "A list of <ip>:<port> pairs (addresses) to send data to", metaVar = "addresses...", handler = AddressOptionHandler.class)

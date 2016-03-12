@@ -9,4 +9,9 @@ public interface ICluster2Builder extends IClusterBuilder {
     default String getClusterConfig() {
         return "2node.xml";
     }
+
+    @Override
+    default String getDgenConsumers() {
+        return "2_consumer.dgen";
+    }
 }

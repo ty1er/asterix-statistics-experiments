@@ -28,7 +28,6 @@ import java.util.logging.Logger;
 import org.apache.asterix.experiment.datagen.DataGeneratorForSpatialIndexEvaluation.InitializationInfo;
 import org.apache.asterix.experiment.datagen.DataGeneratorForSpatialIndexEvaluation.TweetMessage;
 import org.apache.asterix.experiment.datagen.DataGeneratorForSpatialIndexEvaluation.TweetMessageIterator;
-import org.apache.asterix.tools.external.data.GULongIDGenerator;
 
 public class TweetGeneratorForSpatialIndexEvaluation {
 
@@ -58,7 +57,6 @@ public class TweetGeneratorForSpatialIndexEvaluation {
     private OutputStream os;
     private DataGeneratorForSpatialIndexEvaluation dataGenerator = null;
     private ByteBuffer outputBuffer = ByteBuffer.allocate(32 * 1024);
-    private GULongIDGenerator uidGenerator;
     private String openStreetMapFilePath;
     private int locationSampleInterval;
 
@@ -78,7 +76,6 @@ public class TweetGeneratorForSpatialIndexEvaluation {
                 : DEFAULT_GUID_SEED;
         int idIncrement = configuration.get(KEY_GUID_INCREMENT) != null
                 ? Integer.parseInt(configuration.get(KEY_GUID_INCREMENT)) : 1;
-        uidGenerator = new GULongIDGenerator(partition, (byte) (idSeed));
         dataGenerator = new DataGeneratorForSpatialIndexEvaluation(new InitializationInfo(), openStreetMapFilePath,
                 locationSampleInterval);
         tweetIterator = dataGenerator.new TweetMessageIterator(duration, idSeed, idIncrement);

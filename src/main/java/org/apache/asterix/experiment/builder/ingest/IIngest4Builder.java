@@ -4,6 +4,6 @@ public interface IIngest4Builder extends IIngestBuilder {
 
     @Override
     default String getIngestConfig() {
-        return "base_4_ingest.aql";
+        return "4_ingest.aql";
     }
 }

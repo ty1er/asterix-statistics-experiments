@@ -1,3 +1,4 @@
 use dataverse experiments;
 
+drop dataset Tweets if exists;
 create dataset Tweets(TweetMessageType) primary key tweetid;

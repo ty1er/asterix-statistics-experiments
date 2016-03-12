@@ -19,24 +19,29 @@
 
 package org.apache.asterix.experiment.builder;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Unmarshaller;
@@ -48,6 +53,7 @@ import org.apache.asterix.experiment.action.base.SequentialActionList;
 import org.apache.asterix.experiment.action.derived.AbstractRemoteExecutableAction;
 import org.apache.asterix.experiment.action.derived.ManagixActions.CreateAsterixManagixAction;
 import org.apache.asterix.experiment.action.derived.ManagixActions.DeleteAsterixManagixAction;
+import org.apache.asterix.experiment.action.derived.ManagixActions.LogAsterixManagixAction;
 import org.apache.asterix.experiment.action.derived.ManagixActions.StopAsterixManagixAction;
 import org.apache.asterix.experiment.action.derived.RemoteAsterixDriverKill;
 import org.apache.asterix.experiment.action.derived.RunAQLFileAction;
@@ -64,9 +70,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.wicket.util.string.Strings;
 
 public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimentBuilder implements IClusterBuilder,
-        IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfigBuilder {
+IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfigBuilder {
 
     private static final String ASTERIX_INSTANCE_NAME = "a1";
 
@@ -96,7 +103,9 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
 
     private final String ingestFileName;
 
-    protected final String dgenFileName;
+    protected final String dgenProducerFileName;
+
+    protected final String dgenConsumerFileName;
 
     private final String countFileName;
 
@@ -104,7 +113,9 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
 
     private final String statFile;
 
-    protected final SequentialActionList lsAction;
+    private final String resultsFile;
+
+    protected final SequentialActionList duAction;
 
     protected final String openStreetMapFilePath;
     protected final int locationSampleInterval;
@@ -133,11 +144,13 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
         this.duration = config.getDuration();
         this.clusterConfigFileName = getClusterConfig();
         this.ingestFileName = getIngestConfig();
-        this.dgenFileName = getDgenConfig();
+        this.dgenProducerFileName = getDgenProducers();
+        this.dgenConsumerFileName = getDgenConsumers();
         this.countFileName = getCounter();
         this.asterixConfigFileName = getAsterixConfig();
         this.statFile = config.getStatFile();
-        this.lsAction = new SequentialActionList();
+        this.resultsFile = config.getResultsFile();
+        this.duAction = new SequentialActionList();
         this.openStreetMapFilePath = config.getOpenStreetMapFilePath();
         this.locationSampleInterval = config.getLocationSampleInterval();
         recordCountPerBatchDuringIngestionOnly = config.getRecordCountPerBatchDuringIngestionOnly();
@@ -146,7 +159,7 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
         dataGenSleepTimeDuringQuery = config.getDataGenSleepTimeDuringQuery();
     }
 
-    protected void doBuildDDL(SequentialActionList seq) {
+    protected void doBuildDDL(SequentialActionList seq) throws IOException {
         seq.add(new RunAQLFileAction(httpClient, restHost, restPort,
                 localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR).resolve(getExperimentDDL())));
     }
@@ -154,8 +167,8 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
     protected void doPost(SequentialActionList seq) {
     }
 
-    protected void doBuildDataGen(SequentialActionList seq, final Map<String, List<String>> dgenPairs,
-            DataInputStream dgenSeedStream) throws Exception {
+    protected void doBuildDataGen(SequentialActionList seq, final Map<String, List<String>> dgenPairs)
+            throws Exception {
 
         //start datagen
         ParallelActionSet dgenActions = new ParallelActionSet();
@@ -167,13 +180,6 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
 
                 @Override
                 protected String getCommand() {
-                    long dgenSeed = 0;
-                    try {
-                        dgenSeed = dgenSeedStream.readLong();
-                    } catch (IOException e) {
-                        // TODO Auto-generated catch block
-                        e.printStackTrace();
-                    }
                     String ipPortPairs = StringUtils.join(rcvrs.iterator(), " ");
                     String binary = "JAVA_HOME=" + javaHomePath + " "
                             + localExperimentRoot.resolve("bin").resolve("datagenrunner").toString();
@@ -182,7 +188,7 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
                                 "" + recordCountPerBatchDuringIngestionOnly, "-rcbq",
                                 "" + recordCountPerBatchDuringQuery, "-dsti", "" + dataGenSleepTimeDuringIngestionOnly,
                                 "-dstq", "" + dataGenSleepTimeDuringQuery, "-si", "" + locationSampleInterval, "-p",
-                                "" + p, "-d", "" + duration, "-s", "" + dgenSeed, ipPortPairs }, " ");
+                                "" + p, "-pn", "" + dgenPairs.size(), "-d", "" + duration, ipPortPairs }, " ");
                     } else {
                         return StringUtils.join(new String[] { binary, "-rcbi",
                                 "" + recordCountPerBatchDuringIngestionOnly, "-rcbq",
@@ -206,6 +212,11 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
         String asterixConfigPath = localExperimentRoot.resolve(LSMExperimentConstants.CONFIG_DIR)
                 .resolve(LSMExperimentConstants.ASTERIX_CONFIGURATION_DIR).resolve(asterixConfigFileName).toString();
 
+        File clusterConfigFile = new File(clusterConfigPath);
+        JAXBContext ctx = JAXBContext.newInstance(Cluster.class);
+        Unmarshaller unmarshaller = ctx.createUnmarshaller();
+        final Cluster cluster = (Cluster) unmarshaller.unmarshal(clusterConfigFile);
+
         //create instance
         execs.add(new StopAsterixManagixAction(managixHomePath, ASTERIX_INSTANCE_NAME));
         execs.add(new DeleteAsterixManagixAction(managixHomePath, ASTERIX_INSTANCE_NAME));
@@ -213,10 +224,11 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
         execs.add(new CreateAsterixManagixAction(managixHomePath, ASTERIX_INSTANCE_NAME, clusterConfigPath,
                 asterixConfigPath));
 
-        Map<String, List<String>> dgenPairs = readDatagenPairs(
-                localExperimentRoot.resolve(LSMExperimentConstants.DGEN_DIR).resolve(dgenFileName));
+        Map<String, List<String>> dgenProducers = readDatagenPairs(
+                localExperimentRoot.resolve(LSMExperimentConstants.DGEN_DIR).resolve(dgenProducerFileName),
+                localExperimentRoot.resolve(LSMExperimentConstants.DGEN_DIR).resolve(dgenConsumerFileName));
         final Set<String> ncHosts = new HashSet<>();
-        for (List<String> ncHostList : dgenPairs.values()) {
+        for (List<String> ncHostList : dgenProducers.values()) {
             for (String ncHost : ncHostList) {
                 ncHosts.add(ncHost.split(":")[0]);
             }
@@ -226,11 +238,7 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
         //run ddl statements
         // TODO: implement retry handler
         execs.add(new RunAQLFileAction(httpClient, restHost, restPort, localExperimentRoot
-                .resolve(LSMExperimentConstants.AQL_DIR).resolve(LSMExperimentConstants.BASE_TYPES)));
-        doBuildDDL(execs);
-        execs.add(new RunAQLFileAction(httpClient, restHost, restPort,
-                localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR).resolve(LSMExperimentConstants.BASE_DIR)
-                        .resolve(ingestFileName)));
+                .resolve(LSMExperimentConstants.AQL_DIR).resolve(LSMExperimentConstants.BASE_DIR).resolve(LSMExperimentConstants.BASE_TYPES)));
 
         if (statFile != null) {
             ParallelActionSet ioCountActions = new ParallelActionSet();
@@ -239,7 +247,7 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
 
                     @Override
                     protected String getCommand() {
-                        String cmd = "screen -d -m sh -c \"sar -b -u 1 > " + statFile + "\"";
+                        String cmd = "screen -d -m sh -c \"iostat 1 > " + statFile + "\"";
                         return cmd;
                     }
                 });
@@ -247,82 +255,123 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
             execs.add(ioCountActions);
         }
 
-        //        SequentialActionList postLSAction = new SequentialActionList();
-        //        String[] storageRoots = cluster.getIodevices().split(",");
-        //        for (String ncHost : ncHosts) {
-        //            for (final String sRoot : storageRoots) {
-        //                lsAction.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
-        //                    @Override
-        //                    protected String getCommand() {
-        //                        return "ls -Rl " + sRoot;
-        //                    }
-        //                });
-        //                postLSAction.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
-        //                    @Override
-        //                    protected String getCommand() {
-        //                        return "ls -Rl " + sRoot;
-        //                    }
-        //                });
-        //
-        //            }
-        //        }
+        OutputStream os = null;
+        if (resultsFile != null) {
+            os = new FileOutputStream(resultsFile, true);
+        } else {
+            os = System.out;
+        }
+        final PrintStream ps = new PrintStream(os);
 
-        PipedOutputStream pos = new PipedOutputStream();
-        PipedInputStream pis = new PipedInputStream(pos);
-        DataOutputStream dos = new DataOutputStream(pos);
-        DataInputStream dis = new DataInputStream(pis);
-        dos.writeLong(0l);
-        for (int runNum = 0; runNum < queryRunsNum; runNum++) {
-            final int finalRunNum = runNum + 1;
-            execs.add(new IAction() {
-                @Override
-                public void perform() {
-                    if (LOGGER.isLoggable(Level.INFO)) {
-                        LOGGER.info("Executing experiment #" + finalRunNum + " ...");
+        SequentialActionList getDataSizeAction = new SequentialActionList();
+        String[] storageRoots = cluster.getIodevices().split(",");
+        for (String ncHost : ncHosts) {
+            for (final String sRoot : storageRoots) {
+                //                duAction.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
+                //                    @Override
+                //                    protected String getCommand() {
+                //                        return "ls -Rl " + sRoot;
+                //                    }
+                //                });
+                getDataSizeAction.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
+                    @Override
+                    protected String getCommand() {
+                        return "du -h " + sRoot;
                     }
-                }
-            });
-            // main exp
-            doBuildDataGen(execs, dgenPairs, dis);
+                });
 
-            execs.add(new SleepAction(5000));
-            if (countFileName != null) {
-                execs.add(new RunAQLFileAction(httpClient, restHost, restPort,
-                        localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR).resolve(countFileName), dos));
             }
         }
 
-        //        if (statFile != null) {
-        //            ParallelActionSet ioCountKillActions = new ParallelActionSet();
-        //            for (String ncHost : ncHosts) {
-        //                ioCountKillActions.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
-        //
-        //                    @Override
-        //                    protected String getCommand() {
-        //                        String cmd = "screen -X -S `screen -list | grep Detached | awk '{print $1}'` quit";
-        //                        return cmd;
-        //                    }
-        //                });
-        //            }
-        //            execs.add(ioCountKillActions);
-        //        }
+        //        PipedOutputStream pos = new PipedOutputStream();
+        //        PipedInputStream pis = new PipedInputStream(pos);
+        //        DataOutputStream dos = new DataOutputStream(pos);
+        //        dos.writeLong(0);
+        for (int runNum = 0; runNum < queryRunsNum; runNum++) {
+            ParallelActionSet runParallelActions = new ParallelActionSet();
+            final int finalRunNum = runNum + 1;
+            execs.add(new IAction() {
+
+                @Override
+                public void perform() {
+                    if (LOGGER.isLoggable(Level.INFO)) {
+                        LOGGER.info("Executing run #" + finalRunNum + " ...");
+                    }
+                }
+            });
+
+            doBuildDDL(execs);
+            runParallelActions.add(new RunAQLFileAction(httpClient, restHost, restPort,
+                    assemblingIngest(localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
+                            .resolve(LSMExperimentConstants.BASE_DIR).resolve(LSMExperimentConstants.BASE_INGEST)
+                            .resolve(ingestFileName), dgenProducers)));
+
+            SequentialActionList runActions = new SequentialActionList();
+            runActions.add(new SleepAction(2000));
+            // start record generator
+            doBuildDataGen(runActions, dgenProducers);
+
+            runActions.add(new SleepAction(5000));
+            if (countFileName != null) {
+                runActions.add(new RunAQLFileAction(httpClient, restHost, restPort,
+                        localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR).resolve(countFileName), ps));
+                runActions.add(new IAction() {
+                    @Override
+                    public void perform() {
+                        ps.print(",");
+                    }
+                });
+            }
+            runActions.add(new SleepAction(10000));
+            runActions.add(getDataSizeAction);
+            runActions
+            .add(new RunAQLFileAction(httpClient, restHost, restPort,
+                    localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
+                    .resolve(LSMExperimentConstants.BASE_DIR)
+                    .resolve(LSMExperimentConstants.CLEANUP_DIR).resolve(ingestFileName)));
+            runActions
+            .add(new RunAQLFileAction(httpClient, restHost, restPort,
+                    localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
+                    .resolve(LSMExperimentConstants.BASE_DIR)
+                    .resolve(LSMExperimentConstants.CLEANUP_DIR).resolve("base.aql")));
+            runActions.add(new SleepAction(2000));
+
+            runParallelActions.add(runActions);
+            execs.add(runParallelActions);
+        }
+        execs.add(new IAction() {
+
+            @Override
+            public void perform() {
+                ps.println();
+            }
+        });
+
+        if (statFile != null) {
+            ParallelActionSet ioCountKillActions = new ParallelActionSet();
+            for (String ncHost : ncHosts) {
+                ioCountKillActions.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
+
+                    @Override
+                    protected String getCommand() {
+                        String cmd = "screen -list | grep Detached | awk '{print $1}' | xargs -I % screen -X -S % quit";
+                        return cmd;
+                    }
+                });
+            }
+            execs.add(ioCountKillActions);
+        }
 
         doPost(execs);
 
-        //        execs.add(postLSAction);
+        execs.add(new StopAsterixManagixAction(managixHomePath, ASTERIX_INSTANCE_NAME));
         ParallelActionSet killCmds = new ParallelActionSet();
         for (String ncHost : ncHosts) {
             killCmds.add(new RemoteAsterixDriverKill(ncHost, username, sshKeyLocation));
         }
         killCmds.add(new RemoteAsterixDriverKill(restHost, username, sshKeyLocation));
         execs.add(killCmds);
-        execs.add(new StopAsterixManagixAction(managixHomePath, ASTERIX_INSTANCE_NAME));
         if (statFile != null) {
-            File file = new File(clusterConfigPath);
-            JAXBContext ctx = JAXBContext.newInstance(Cluster.class);
-            Unmarshaller unmarshaller = ctx.createUnmarshaller();
-            final Cluster cluster = (Cluster) unmarshaller.unmarshal(file);
-
             ParallelActionSet collectIOActions = new ParallelActionSet();
             for (String ncHost : ncHosts) {
                 collectIOActions.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
@@ -337,6 +386,10 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
             execs.add(collectIOActions);
 
         }
+
+        //collect logs form the instance
+        execs.add(new LogAsterixManagixAction(managixHomePath, ASTERIX_INSTANCE_NAME, localExperimentRoot
+                .resolve(LSMExperimentConstants.LOG_DIR + "-" + logDirSuffix).resolve(getName()).toString()));
 
         //collect profile information
         //        if (ExperimentProfiler.PROFILE_MODE) {
@@ -364,7 +417,7 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
             SequentialActionList getQueryResultFileActions = new SequentialActionList();
             final String queryResultFilePath = openStreetMapFilePath.substring(0,
                     openStreetMapFilePath.lastIndexOf(File.separator)) + File.separator + "QueryGenResult-*.txt";
-            for (final String qgenHost : dgenPairs.keySet())
+            for (final String qgenHost : dgenProducers.keySet())
 
             {
                 getQueryResultFileActions.add(new AbstractRemoteExecutableAction(restHost, username, sshKeyLocation) {
@@ -373,7 +426,7 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
                     protected String getCommand() {
                         String cmd = "scp " + username + "@" + qgenHost + ":" + queryResultFilePath + " "
                                 + localExperimentRoot.resolve(LSMExperimentConstants.LOG_DIR + "-" + logDirSuffix)
-                                        .resolve(getName()).toString();
+                                .resolve(getName()).toString();
                         return cmd;
                     }
                 });
@@ -385,22 +438,48 @@ public abstract class AbstractLSMBaseExperimentBuilder extends AbstractExperimen
         e.addBody(execs);
     }
 
-    protected Map<String, List<String>> readDatagenPairs(Path p) throws IOException {
+    protected String assemblingIngest(Path ingestAqlFile, Map<String, List<String>> dgenMap) throws IOException {
+        String ingestAql = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(Files.readAllBytes(ingestAqlFile))).toString();
+        Map<String, List<String>> portNCHostMap = new TreeMap<>();
+        for (List<String> ncHostList : dgenMap.values()) {
+            for (String ncHost : ncHostList) {
+                String port = ncHost.split(":")[1];
+                List<String> hostList = portNCHostMap.get(port);
+                if (hostList == null) {
+                    hostList = new ArrayList<>();
+                }
+                hostList.add(ncHost);
+                portNCHostMap.put(port, hostList);
+            }
+        }
+        Matcher m = Pattern.compile(IIngestBuilder.INGEST_SUBSTITUTE_MARKER).matcher(ingestAql);
+        Iterator<Map.Entry<String, List<String>>> mapIt = portNCHostMap.entrySet().iterator();
+        StringBuffer sb = new StringBuffer();
+        while (m.find() && mapIt.hasNext()) {
+            m.appendReplacement(sb, Strings.join(",", mapIt.next().getValue()));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    protected Map<String, List<String>> readDatagenPairs(Path produsersPath, Path consumersPath) throws IOException {
         Map<String, List<String>> dgenPairs = new HashMap<>();
-        Scanner s = new Scanner(p, StandardCharsets.UTF_8.name());
+        Scanner producerScan = new Scanner(produsersPath, StandardCharsets.UTF_8.name());
+        Scanner consumerScan = new Scanner(consumersPath, StandardCharsets.UTF_8.name());
         try {
-            while (s.hasNextLine()) {
-                String line = s.nextLine();
-                String[] pair = line.split("\\s+");
-                List<String> vals = dgenPairs.get(pair[0]);
+            while (producerScan.hasNextLine() && consumerScan.hasNextLine()) {
+                String producer = producerScan.nextLine();
+                String consumer = consumerScan.nextLine();
+                List<String> vals = dgenPairs.get(producer);
                 if (vals == null) {
                     vals = new ArrayList<>();
-                    dgenPairs.put(pair[0], vals);
+                    dgenPairs.put(producer, vals);
                 }
-                vals.add(pair[1]);
+                vals.add(consumer);
             }
         } finally {
-            s.close();
+            producerScan.close();
+            consumerScan.close();
         }
         return dgenPairs;
     }

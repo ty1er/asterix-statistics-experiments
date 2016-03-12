@@ -1,6 +1,6 @@
 package org.apache.asterix.experiment.builder.counter;
 
-public interface INumericAvgCounterBuilder extends ICounterBuilder {
+public interface IRecordsCounterBuilder extends ICounterBuilder {
 
     @Override
     default String getCounter() {

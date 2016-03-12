@@ -19,6 +19,7 @@
 
 package org.apache.asterix.experiment.action.derived;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -47,7 +48,7 @@ public class RunAQLFileAction extends AbstractAction {
 
     private final CloseableHttpClient httpClient;
 
-    private final Path aqlFilePath;
+    private String aqlContent;
 
     private final String restHost;
 
@@ -55,18 +56,26 @@ public class RunAQLFileAction extends AbstractAction {
 
     private final OutputStream os;
 
-    public RunAQLFileAction(CloseableHttpClient httpClient, String restHost, int restPort, Path aqlFilePath) {
-        this.httpClient = httpClient;
-        this.aqlFilePath = aqlFilePath;
-        this.restHost = restHost;
-        this.restPort = restPort;
-        os = null;
+    public RunAQLFileAction(CloseableHttpClient httpClient, String restHost, int restPort, Path aqlFilePath)
+            throws IOException {
+        this(httpClient, restHost, restPort,
+                StandardCharsets.UTF_8.decode(ByteBuffer.wrap(Files.readAllBytes(aqlFilePath))).toString());
     }
 
     public RunAQLFileAction(CloseableHttpClient httpClient, String restHost, int restPort, Path aqlFilePath,
+            OutputStream os) throws IOException {
+        this(httpClient, restHost, restPort,
+                StandardCharsets.UTF_8.decode(ByteBuffer.wrap(Files.readAllBytes(aqlFilePath))).toString(), os);
+    }
+
+    public RunAQLFileAction(CloseableHttpClient httpClient, String restHost, int restPort, String aqlContent) {
+        this(httpClient, restHost, restPort, aqlContent, null);
+    }
+
+    public RunAQLFileAction(CloseableHttpClient httpClient, String restHost, int restPort, String aqlContent,
             OutputStream os) {
         this.httpClient = httpClient;
-        this.aqlFilePath = aqlFilePath;
+        this.aqlContent = aqlContent;
         this.restHost = restHost;
         this.restPort = restPort;
         this.os = os;
@@ -74,25 +83,24 @@ public class RunAQLFileAction extends AbstractAction {
 
     @Override
     public void doPerform() throws Exception {
-        String aql = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(Files.readAllBytes(aqlFilePath))).toString();
         String uri = MessageFormat.format(REST_URI_TEMPLATE, restHost, String.valueOf(restPort));
-        HttpEntity ent = EntityBuilder.create().setText(aql).build();
+        HttpEntity ent = EntityBuilder.create().setText(aqlContent).build();
         //StandardCharsets.UTF_8
         HttpEntity entity = null;
         CloseableHttpResponse resp = null;
         try {
-            int timeout = 60000;
-            HttpUriRequest request = RequestBuilder.post().setUri(uri).setHeader("Content-Type", "application/json")
-                    .setHeader("Connection", "close").setEntity(ent)
-                    .setConfig(RequestConfig.copy(RequestConfig.DEFAULT).setSocketTimeout(10000)
-                            .setConnectTimeout(timeout).setConnectionRequestTimeout(timeout).build())
+            //            int timeout = 300000;
+            HttpUriRequest request = RequestBuilder.post().setUri(uri).setHeader("Accept", "application/x-adm")
+                    .setHeader("Connection", "close").setEntity(ent).setConfig(RequestConfig.copy(RequestConfig.DEFAULT)
+                            /*.setSocketTimeout(10000)
+                            .setConnectTimeout(timeout).setConnectionRequestTimeout(timeout)*/.build())
                     .build();
             resp = httpClient.execute(request);
             entity = resp.getEntity();
             if (entity != null && entity.isStreaming()) {
                 printStream(entity.getContent());
             }
-            if (aql.contains("compact")) {
+            if (aqlContent.contains("compact")) {
                 if (LOGGER.isLoggable(Level.INFO)) {
                     LOGGER.info("Compaction has been completed");
                 }
@@ -112,8 +120,25 @@ public class RunAQLFileAction extends AbstractAction {
             IOUtils.copy(content, System.out);
             System.out.flush();
         } else {
-            IOUtils.copy(content, os);
-            os.flush();
+            OutputStream choppedOutput = new NoNewLineFileInputStream(os);
+            IOUtils.copy(content, choppedOutput);
+            choppedOutput.flush();
+        }
+    }
+
+    class NoNewLineFileInputStream extends OutputStream {
+
+        private OutputStream outerStream;
+
+        public NoNewLineFileInputStream(OutputStream outerStream) throws FileNotFoundException {
+            this.outerStream = outerStream;
+        }
+
+        @Override
+        public void write(int c) throws IOException {
+            if (c != -1 && c != '\n' && c != '\r') {
+                outerStream.write(c);
+            }
         }
     }
 }

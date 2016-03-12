@@ -19,6 +19,7 @@
 
 package org.apache.asterix.experiment.builder;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -58,7 +59,7 @@ public class SingleNodeIngestionExperimentBuilder extends AbstractLocalExperimen
     }
 
     @Override
-    protected void addPre(SequentialActionList pre) {
+    protected void addPre(SequentialActionList pre) throws IOException {
         pre.add(new RunAQLFileAction(httpClient, restHost, restPort, aqlFilePath));
     }
 

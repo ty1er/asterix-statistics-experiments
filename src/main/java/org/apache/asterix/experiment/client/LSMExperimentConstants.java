@@ -29,9 +29,13 @@ public class LSMExperimentConstants {
 
     public static final String DGEN_DIR = "dgen";
 
+    public static final String CLEANUP_DIR = "cleanup";
+
     public static final String LOG_DIR = "log";
 
-    public static final String BASE_TYPES = "base/base_types.aql";
+    public static final String BASE_TYPES = "base_types.aql";
+
+    public static final String BASE_INGEST = "base_ingest.aql";
 
     public static final String ASTERIX_CONFIGURATION_DIR = "asterix-config";
 }

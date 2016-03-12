@@ -19,6 +19,8 @@
 
 package org.apache.asterix.experiment.builder;
 
+import java.io.IOException;
+
 import org.apache.asterix.experiment.action.base.SequentialActionList;
 
 public abstract class AbstractLocalExperimentBuilder extends AbstractExperimentBuilder {
@@ -29,7 +31,7 @@ public abstract class AbstractLocalExperimentBuilder extends AbstractExperimentB
         this.nNodeControllers = nNodeControllers;
     }
 
-    protected abstract void addPre(SequentialActionList pre);
+    protected abstract void addPre(SequentialActionList pre) throws IOException;
 
     protected abstract void addPost(SequentialActionList post);
 

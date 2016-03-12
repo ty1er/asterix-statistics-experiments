@@ -35,8 +35,13 @@ public class SequentialActionList extends AbstractAction {
 
     @Override
     protected void doPerform() throws Exception {
-        for (IAction e : actions) {
-            e.perform();
+        try {
+            for (IAction e : actions) {
+                e.perform();
+            }
+        } catch (Exception e) {
+            //            System.err.println("Sequential execution failed:" + e.getMessage() + "\n Stacktrace:");
+            //            e.printStackTrace(System.err);
         }
     }
 }

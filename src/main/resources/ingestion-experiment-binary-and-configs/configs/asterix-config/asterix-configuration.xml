@@ -16,17 +16,37 @@
 
 	<property>
 		<name>nc.java.opts</name>
-		<value>-Xmx2G</value>
+		<value>-Xms6144m -Xmx7168m</value>
 		<description>JVM parameters for each Node Contoller (NC)</description>
 	</property>
 
 	<property>
 		<name>cc.java.opts</name>
-		<value>-Xmx2G</value>
+		<value>-Xms6144m -Xmx6144m -Xdebug -Xrunjdwp:server=y,transport=dt_socket,address=4000,suspend=n</value>
 		<description>JVM parameters for each Cluster Contoller (CC)
 		</description>
 	</property>
-
+    <property>
+        <name>statistics.synopsis.type</name>
+        <value>None</value>
+        <description>The type of synopsis used for collecting dataset statistics.
+            (Default = None)
+        </description>
+    </property>
+    <property>
+        <name>statistics.synopsis.size</name>
+        <value>100</value>
+        <description>The size of synopsis (for wavelets-based synopses the number of
+            persisted coefficients in wavelet transform). (Default = 100)
+        </description>
+    </property>
+    <property>
+        <name>statistics.merge.strategy.timeout</name>
+        <value>5000</value>
+        <description>The timeout in milliseconds between the statistics merge operation invocations.
+            (Default = 60000)
+        </description>
+    </property>
     <property>
         <name>max.wait.active.cluster</name>
         <value>60</value>
@@ -45,7 +65,7 @@
 
 	<property>
 		<name>storage.buffercache.size</name>
-		<value>536870912</value>
+		<value>3221225472</value>
 		<description>[3GB] The size of memory allocated to the disk buffer cache.
 			The value should be a multiple of the buffer cache page size(Default
 			= "536870912" // 512MB)
@@ -71,7 +91,7 @@
 
 	<property>
 		<name>storage.memorycomponent.numpages</name>
-		<value>1024</value>
+		<value>8192</value>
 		<description>
 		</description>
 	</property>
@@ -95,7 +115,7 @@
 
 	<property>
 		<name>storage.memorycomponent.globalbudget</name>
-		<value>536870192</value>
+		<value>4399824896</value>
 		<description>[4GB + 8MB]The total size of memory in bytes that the sum of all
 			open memory
 			components cannot exceed. (Default = "536870192" // 512MB)
@@ -119,7 +139,7 @@
 
 	<property>
 		<name>txn.log.buffer.pagesize</name>
-		<value>524288</value>
+		<value>8388608</value>
 		<description>[8MB]The size of pages in the in-memory log buffer. (Default =
 			"524288" // 512KB)
 		</description>
@@ -242,14 +262,14 @@
           <description>Feed memory budget (1 GB = 1073741824 Bytes)
           </description>
       </property>
-
+  
       <property>
           <name>feed.pending.work.threshold</name>
           <value>1000</value>
-          <description>Feed pending work threshold
+          <description>Feed pending work threshold 
           </description>
       </property>
-
+      
       <property>
           <name>feed.max.threshold.period</name>
           <value>100</value>

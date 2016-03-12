@@ -6,4 +6,8 @@ public interface IClusterBuilder {
         return null;
     }
 
+    default String getDgenConsumers() {
+        return null;
+    }
+
 }

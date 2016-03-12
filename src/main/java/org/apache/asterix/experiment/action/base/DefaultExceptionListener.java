@@ -30,9 +30,9 @@ public class DefaultExceptionListener implements IExceptionListener {
     public void caughtException(Throwable t) {
         if (LOGGER.isLoggable(Level.SEVERE)) {
             LOGGER.severe("Caught exception: " + t);
-            LOGGER.severe("Stopping...");
+            //            LOGGER.severe("Stopping...");
             t.printStackTrace();
         }
-        System.exit(1);
+        //        System.exit(1);
     }
 }

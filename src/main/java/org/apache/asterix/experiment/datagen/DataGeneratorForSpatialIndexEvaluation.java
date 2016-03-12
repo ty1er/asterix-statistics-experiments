@@ -30,7 +30,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
-import org.apache.asterix.tools.external.data.DataGenerator;
+import org.apache.asterix.external.util.DataGenerator;
 
 public class DataGeneratorForSpatialIndexEvaluation {
 

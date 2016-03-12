@@ -9,4 +9,9 @@ public interface ICluster4Builder extends IClusterBuilder {
     default String getClusterConfig() {
         return "4node.xml";
     }
+
+    @Override
+    default String getDgenConsumers() {
+        return "4_consumer.dgen";
+    }
 }
