@@ -45,15 +45,15 @@ public class TimedAction extends AbstractAction {
 
     @Override
     protected void doPerform() throws Exception {
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
         action.perform();
-        long end = System.currentTimeMillis();
+        long end = System.nanoTime();
         if (LOGGER.isLoggable(Level.SEVERE)) {
             if (os == null) {
                 System.out.println("Elapsed time = " + (end - start) + " for action " + action);
                 System.out.flush();
             } else {
-                os.write(("Elapsed time = " + (end - start) + " for action " + action).getBytes());
+                os.write(("" + (end - start)*1000000).getBytes());
                 os.flush();
             }
         }

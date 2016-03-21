@@ -40,7 +40,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.xml.bind.JAXBContext;
@@ -101,7 +100,7 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
 
     private final String clusterConfigFileName;
 
-    private final String ingestFileName;
+    private final int ingestFeedsNumber;
 
     protected final String dgenProducerFileName;
 
@@ -124,6 +123,7 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
     protected final int recordCountPerBatchDuringQuery;
     protected final long dataGenSleepTimeDuringIngestionOnly;
     protected final long dataGenSleepTimeDuringQuery;
+    protected final LSMExperimentSetRunnerConfig.DataGenerationOutput dataGenOutput;
 
     private static final Logger LOGGER = Logger.getLogger(AbstractLSMBaseExperimentBuilder.class.getName());
 
@@ -143,7 +143,7 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
         this.sshKeyLocation = config.getSSHKeyLocation();
         this.duration = config.getDuration();
         this.clusterConfigFileName = getClusterConfig();
-        this.ingestFileName = getIngestConfig();
+        this.ingestFeedsNumber = getIngestFeedsNumber();
         this.dgenProducerFileName = getDgenProducers();
         this.dgenConsumerFileName = getDgenConsumers();
         this.countFileName = getCounter();
@@ -157,6 +157,12 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
         recordCountPerBatchDuringQuery = config.getRecordCountPerBatchDuringQuery();
         dataGenSleepTimeDuringIngestionOnly = config.getDataGenSleepTimeDuringIngestionOnly();
         dataGenSleepTimeDuringQuery = config.getDataGenSleepTimeDuringQuery();
+        dataGenOutput = config.getDatagenOutput();
+    }
+
+    @Override
+    public String getName() {
+        return this.getClass().getSimpleName();
     }
 
     protected void doBuildDDL(SequentialActionList seq) throws IOException {
@@ -276,7 +282,7 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
                 getDataSizeAction.add(new AbstractRemoteExecutableAction(ncHost, username, sshKeyLocation) {
                     @Override
                     protected String getCommand() {
-                        return "du -h " + sRoot;
+                        return "du -cksh " + sRoot;
                     }
                 });
 
@@ -288,7 +294,6 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
         //        DataOutputStream dos = new DataOutputStream(pos);
         //        dos.writeLong(0);
         for (int runNum = 0; runNum < queryRunsNum; runNum++) {
-            ParallelActionSet runParallelActions = new ParallelActionSet();
             final int finalRunNum = runNum + 1;
             execs.add(new IAction() {
 
@@ -301,16 +306,42 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
             });
 
             doBuildDDL(execs);
-            runParallelActions.add(new RunAQLFileAction(httpClient, restHost, restPort,
-                    assemblingIngest(localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
-                            .resolve(LSMExperimentConstants.BASE_DIR).resolve(LSMExperimentConstants.BASE_INGEST)
-                            .resolve(ingestFileName), dgenProducers)));
+            Map<String, List<String>> portNCHostMap = new TreeMap<>();
+            for (List<String> ncHostList : dgenProducers.values()) {
+                for (String ncHost : ncHostList) {
+                    String port = ncHost.split(":")[1];
+                    List<String> hostList = portNCHostMap.get(port);
+                    if (hostList == null) {
+                        hostList = new ArrayList<>();
+                    }
+                    hostList.add(ncHost);
+                    portNCHostMap.put(port, hostList);
+                }
+            }
+            ParallelActionSet runParallelActions = new ParallelActionSet();
+            Iterator<Map.Entry<String, List<String>>> mapIt = portNCHostMap.entrySet().iterator();
+            for (int i = 0; i < ingestFeedsNumber; i++) {
+                runParallelActions.add(new RunAQLFileAction(httpClient, restHost, restPort,
+                        assemblingIngest(localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
+                                .resolve(LSMExperimentConstants.BASE_DIR).resolve(LSMExperimentConstants.BASE_INGEST),
+                                Strings.join(",", mapIt.next().getValue()), i + 1)));
+            }
 
             SequentialActionList runActions = new SequentialActionList();
+
             runActions.add(new SleepAction(2000));
             // start record generator
             doBuildDataGen(runActions, dgenProducers);
+            for (int i = 0; i < ingestFeedsNumber; i++) {
+                runActions.add(new RunAQLFileAction(httpClient, restHost, restPort,
+                        assemblingIngestCleanup(localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
+                                .resolve(LSMExperimentConstants.BASE_DIR)
+                                .resolve(LSMExperimentConstants.INGEST_CLEANUP), i + 1)));
+            }
+            runParallelActions.add(runActions);
+            execs.add(runParallelActions);
 
+            runActions = new SequentialActionList();
             runActions.add(new SleepAction(5000));
             if (countFileName != null) {
                 runActions.add(new RunAQLFileAction(httpClient, restHost, restPort,
@@ -322,22 +353,18 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
                     }
                 });
             }
-            runActions.add(new SleepAction(10000));
+            runActions.add(new SleepAction(2000));
             runActions.add(getDataSizeAction);
+
+            runActions.add(new SleepAction(2000));
             runActions
             .add(new RunAQLFileAction(httpClient, restHost, restPort,
                     localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
                     .resolve(LSMExperimentConstants.BASE_DIR)
-                    .resolve(LSMExperimentConstants.CLEANUP_DIR).resolve(ingestFileName)));
-            runActions
-            .add(new RunAQLFileAction(httpClient, restHost, restPort,
-                    localExperimentRoot.resolve(LSMExperimentConstants.AQL_DIR)
-                    .resolve(LSMExperimentConstants.BASE_DIR)
-                    .resolve(LSMExperimentConstants.CLEANUP_DIR).resolve("base.aql")));
+                    .resolve("base_cleanup.aql")));
             runActions.add(new SleepAction(2000));
 
-            runParallelActions.add(runActions);
-            execs.add(runParallelActions);
+            execs.add(runActions);
         }
         execs.add(new IAction() {
 
@@ -438,28 +465,20 @@ IDgenBuilder, IExperimentBuilder, ICounterBuilder, IIngestBuilder, IAsterixConfi
         e.addBody(execs);
     }
 
-    protected String assemblingIngest(Path ingestAqlFile, Map<String, List<String>> dgenMap) throws IOException {
+    protected String assemblingIngest(Path ingestAqlFile, String socketList, int i) throws IOException {
         String ingestAql = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(Files.readAllBytes(ingestAqlFile))).toString();
-        Map<String, List<String>> portNCHostMap = new TreeMap<>();
-        for (List<String> ncHostList : dgenMap.values()) {
-            for (String ncHost : ncHostList) {
-                String port = ncHost.split(":")[1];
-                List<String> hostList = portNCHostMap.get(port);
-                if (hostList == null) {
-                    hostList = new ArrayList<>();
-                }
-                hostList.add(ncHost);
-                portNCHostMap.put(port, hostList);
-            }
-        }
-        Matcher m = Pattern.compile(IIngestBuilder.INGEST_SUBSTITUTE_MARKER).matcher(ingestAql);
-        Iterator<Map.Entry<String, List<String>>> mapIt = portNCHostMap.entrySet().iterator();
-        StringBuffer sb = new StringBuffer();
-        while (m.find() && mapIt.hasNext()) {
-            m.appendReplacement(sb, Strings.join(",", mapIt.next().getValue()));
-        }
-        m.appendTail(sb);
-        return sb.toString();
+        ingestAql = Pattern.compile(IIngestBuilder.INGEST_FEED_NAME).matcher(ingestAql)
+                .replaceAll(IIngestBuilder.INGEST_FEED_NAME + i);
+        ingestAql = Pattern.compile(IIngestBuilder.INGEST_SUBSTITUTE_MARKER).matcher(ingestAql).replaceFirst(socketList);
+        return ingestAql;
+    }
+
+    protected String assemblingIngestCleanup(Path ingestCleanupFile, int i) throws IOException {
+        String ingestAql = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(Files.readAllBytes(ingestCleanupFile)))
+                .toString();
+        ingestAql = Pattern.compile(IIngestBuilder.INGEST_FEED_NAME).matcher(ingestAql)
+                .replaceFirst(IIngestBuilder.INGEST_FEED_NAME + i);
+        return ingestAql;
     }
 
     protected Map<String, List<String>> readDatagenPairs(Path produsersPath, Path consumersPath) throws IOException {

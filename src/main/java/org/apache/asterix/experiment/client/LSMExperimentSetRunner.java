@@ -19,37 +19,25 @@
 
 package org.apache.asterix.experiment.client;
 
-import java.util.ArrayList;
-import java.util.Collection;
+import java.lang.reflect.Constructor;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import org.apache.asterix.experiment.action.base.SequentialActionList;
 import org.apache.asterix.experiment.builder.AbstractExperimentBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest1WaveletBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest2WaveletBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster1Ingest4WaveletBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest1WaveletBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2ContinuousHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2NostatsBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2UniformHistBuilder;
-import org.apache.asterix.experiment.builder.StatisticsExperiment1Cluster2Ingest2WaveletBuilder;
+import org.apache.asterix.experiment.builder.AbstractLSMBaseExperimentBuilder;
 import org.kohsuke.args4j.CmdLineException;
 import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
+import org.reflections.Reflections;
+import org.reflections.scanners.MethodParameterScanner;
+import org.reflections.scanners.TypeElementsScanner;
+import org.reflections.scanners.TypesScanner;
+import org.reflections.util.ClasspathHelper;
+import org.reflections.util.ConfigurationBuilder;
+import org.reflections.util.FilterBuilder;
 
 public class LSMExperimentSetRunner {
 
@@ -121,6 +109,18 @@ public class LSMExperimentSetRunner {
 
         public String getSSHKeyLocation() {
             return sshKeyLocation;
+        }
+
+        static public enum DataGenerationOutput {
+            File,
+            Socket
+        }
+
+        @Option(name = "-do", aliases = "--datagen-output", usage = "Output for data generation ({File|Socket})")
+        private DataGenerationOutput datagenOutput;
+
+        public DataGenerationOutput getDatagenOutput() {
+            return datagenOutput;
         }
 
         @Option(name = "-d", aliases = "--datagen-duartion", usage = "Data generation duration in seconds", metaVar = "DATAGENDURATION")
@@ -264,37 +264,26 @@ public class LSMExperimentSetRunner {
             System.exit(1);
         }
 
-        Collection<AbstractExperimentBuilder> suite = new ArrayList<>();
-
-        suite.add(new StatisticsExperiment1Cluster1Ingest1NostatsBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest1WaveletBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest1ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest1UniformHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest2NostatsBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest2WaveletBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest2ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest2UniformHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest4NostatsBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest4WaveletBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest4ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster1Ingest4UniformHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest1NostatsBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest1WaveletBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest1ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest1UniformHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest2NostatsBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest2WaveletBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest2ContinuousHistBuilder(config));
-        suite.add(new StatisticsExperiment1Cluster2Ingest2UniformHistBuilder(config));
+        final String pkg ="org.apache.asterix.experiment.builder.suite";
+        Reflections reflections = //new Reflections("org.apache.asterix.experiment.builder.suite");
+                new Reflections(new ConfigurationBuilder()
+                        .setUrls(ClasspathHelper.forPackage(pkg))
+                        .filterInputsBy(new FilterBuilder().includePackage(pkg))
+                        .setScanners(new TypeElementsScanner().publicOnly(), new MethodParameterScanner()));
+        Map<String, AbstractLSMBaseExperimentBuilder> nameMap = new TreeMap<>();
+        for (Constructor c : reflections.getConstructorsMatchParams(LSMExperimentSetRunnerConfig.class)) {
+            AbstractLSMBaseExperimentBuilder b = (AbstractLSMBaseExperimentBuilder) c.newInstance(config);
+            nameMap.put(b.getName(), b);
+        }
 
         Pattern p = config.getRegex() == null ? null : Pattern.compile(config.getRegex());
 
         SequentialActionList exps = new SequentialActionList();
-        for (AbstractExperimentBuilder eb : suite) {
-            if (p == null || p.matcher(eb.getName()).matches()) {
-                exps.add(eb.build());
+        for (Map.Entry<String, AbstractLSMBaseExperimentBuilder> e : nameMap.entrySet()) {
+            if (p == null || p.matcher(e.getKey()).matches()) {
+                exps.add(e.getValue().build());
                 if (LOGGER.isLoggable(Level.INFO)) {
-                    LOGGER.info("Added " + eb.getName() + " to run list...");
+                    LOGGER.info("Added " + e.getKey() + " to run list...");
                 }
             }
         }

@@ -55,11 +55,7 @@ public class DataGeneratorStatistics {
     private TweetMessage twMessage = new TweetMessage();
 
     public DataGeneratorStatistics(InitializationInfo info) {
-        initialize(info, null, 0);
-    }
-
-    public DataGeneratorStatistics(InitializationInfo info, String openStreetMapFilePath, int locationSampleInterval) {
-        initialize(info, openStreetMapFilePath, locationSampleInterval);
+        initialize(info);
     }
 
     public class TweetMessageIterator implements Iterator<TweetMessage> {
@@ -129,7 +125,7 @@ public class DataGeneratorStatistics {
         public SpreadDistributionType distributionType;
     }
 
-    public void initialize(InitializationInfo info, String openStreetMapFilePath, int locationSampleInterval) {
+    public void initialize(InitializationInfo info) {
         randDateGen = new RandomDateGenerator(info.startDate, info.endDate);
         randNameGen = new RandomNameGenerator(info.firstNames, info.lastNames);
         randLocationGen = new RandomLocationGenerator(24, 49, 66, 98);

@@ -37,5 +37,9 @@ public class LSMExperimentConstants {
 
     public static final String BASE_INGEST = "base_ingest.aql";
 
+    public static final String INGEST_CLEANUP = "ingest_cleanup.aql";
+
+    public static final String BASE_CLEANUP = "base_cleanup.aql";
+
     public static final String ASTERIX_CONFIGURATION_DIR = "asterix-config";
 }
